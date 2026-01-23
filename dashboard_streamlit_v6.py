@@ -124,6 +124,7 @@ data.columns = (
 col_fecha = next((c for c in data.columns if "FECHA" in c), None)
 col_canal = next((c for c in data.columns if "CANAL" in c), None)
 col_servicio = "SERVICIO_SOLICITADO" if "SERVICIO_SOLICITADO" in data.columns else None
+col_tipo_servicio = "SERVICIO" if "SERVICIO" in data.columns else None
 
 
 # =====================================================================================
@@ -142,6 +143,7 @@ for campo in ["DISTRITO", "VENDEDOR", "GRUPO_DE_COMISION", col_servicio]:
         data[campo] = data[campo].astype(str).str.upper().str.strip()
 
 # =====================================================================================
+# =====================================================================================
 # SIDEBAR – FILTROS
 # =====================================================================================
 
@@ -149,6 +151,7 @@ st.sidebar.markdown("## 🎛️ Filtros")
 with st.sidebar.container():
     st.markdown('<div class="sidebar-box">', unsafe_allow_html=True)
 
+    # Filtro por rango de fechas
     if col_fecha:
         fechas = st.date_input(
             "Rango de fechas",
@@ -159,6 +162,7 @@ with st.sidebar.container():
             (data[col_fecha] <= pd.to_datetime(fechas[1]))
         ]
 
+    # Filtro por grupo de comisión
     grupo_sel = st.multiselect(
         "Grupo de comisión",
         sorted(data["GRUPO_DE_COMISION"].dropna().unique())
@@ -166,6 +170,7 @@ with st.sidebar.container():
     if grupo_sel:
         data = data[data["GRUPO_DE_COMISION"].isin(grupo_sel)]
 
+    # Filtro por vendedor
     vendedor_sel = st.multiselect(
         "Vendedor",
         sorted(data["VENDEDOR"].dropna().unique())
@@ -173,31 +178,79 @@ with st.sidebar.container():
     if vendedor_sel:
         data = data[data["VENDEDOR"].isin(vendedor_sel)]
 
+    # ✅ NUEVO FILTRO – Tipo de servicio (DUO / INTERNET)
+    if "SERVICIO" in data.columns:
+        tipo_servicio_sel = st.multiselect(
+            "Tipo de servicio",
+            sorted(data["SERVICIO"].dropna().unique())
+        )
+        if tipo_servicio_sel:
+            data = data[data["SERVICIO"].isin(tipo_servicio_sel)]
+
     st.markdown('</div>', unsafe_allow_html=True)
 
+
 # =====================================================================================
-# EVOLUCIÓN DE VENTAS POR MES (LÍNEAS)
+# =====================================================================================
+# EVOLUCIÓN DE VENTAS (INTELIGENTE: MES o DÍA)
 # =====================================================================================
 
 if col_fecha:
-    st.markdown("## 📈 Evolución de Ventas por Mes")
+    st.markdown("## 📈 Evolución de Ventas")
 
-    data["MES"] = data[col_fecha].dt.to_period("M").astype(str)
+    fecha_min = data[col_fecha].min()
+    fecha_max = data[col_fecha].max()
 
-    ventas_mes = (
-        data.groupby("MES")
-        .size()
-        .reset_index(name="VENTAS")
-        .sort_values("MES")
+    mismo_mes = (
+        fecha_min.year == fecha_max.year and
+        fecha_min.month == fecha_max.month
     )
 
     st.markdown('<div class="section-box">', unsafe_allow_html=True)
-    fig = px.line(
-        ventas_mes,
-        x="MES",
-        y="VENTAS",
-        markers=True
+
+    if mismo_mes:
+        # 🔹 Ventas por DÍA
+        data["DIA"] = data[col_fecha].dt.date
+
+        ventas_tiempo = (
+            data.groupby("DIA")
+            .size()
+            .reset_index(name="VENTAS")
+            .sort_values("DIA")
+        )
+
+        fig = px.line(
+            ventas_tiempo,
+            x="DIA",
+            y="VENTAS",
+            markers=True,
+            title="Ventas diarias"
+        )
+
+    else:
+        # 🔹 Ventas por MES
+        data["MES"] = data[col_fecha].dt.to_period("M").astype(str)
+
+        ventas_tiempo = (
+            data.groupby("MES")
+            .size()
+            .reset_index(name="VENTAS")
+            .sort_values("MES")
+        )
+
+        fig = px.line(
+            ventas_tiempo,
+            x="MES",
+            y="VENTAS",
+            markers=True,
+            title="Ventas mensuales"
+        )
+
+    fig.update_layout(
+        xaxis_title="Periodo",
+        yaxis_title="Cantidad de Ventas"
     )
+
     st.plotly_chart(fig, use_container_width=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
